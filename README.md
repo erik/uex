@@ -40,15 +40,15 @@ output in a command. Effectively, it just calls `tail -F
 
 Client only supports some basic IRC commands.
 
-| Command          | Description                                 |
-| :-------         | :-----------                                |
-| `/switch BUFFER` | Switch view to `BUFFER`                     |
-| `/list`          | Show all active buffers on current network. |
-| `/refresh`       | Rerender all history for current buffer.    |
-| `/r[econnect]`   | Close and reconnect to current network.     |
-| `/j[oin]`        | Join a channel.                             |
-| `/quote MSG`     | Send `MSG` to server directly.              |
-| `/me ACTION`     | Send CTCP ACTION.                           |
+| Command            | Description                                      |
+| :-------           | :-----------                                     |
+| `/switch [BUFFER]` | Switch view to `BUFFER` (default to last buffer) |
+| `/list`            | Show all active buffers on current network.      |
+| `/refresh`         | Rerender all history for current buffer.         |
+| `/r[econnect]`     | Close and reconnect to current network.          |
+| `/j[oin] CHANNEL`  | Join a channel.                                  |
+| `/quote MSG`       | Send `MSG` to server directly.                   |
+| `/me ACTION`       | Send CTCP ACTION.                                |
 
 ## note
 

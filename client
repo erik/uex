@@ -256,8 +256,6 @@ def main():
 
 
 def run_client(path, name, last_name):
-    print('~~~ %s ~~~' % name)
-
     full_path = os.path.join(path, name)
     if not os.path.exists(full_path):
         print('%s: no such directory' % full_path)

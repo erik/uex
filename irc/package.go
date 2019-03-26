@@ -280,12 +280,13 @@ func (c *Client) handleMessage(msg *irc.Message) {
 		buf = nil
 
 	case irc.RPL_NAMREPLY:
-		target := msg.Params[1]
-		names := strings.Split(" ", msg.Trailing())
+		target := msg.Params[2]
+		names := strings.Split(msg.Trailing(), " ")
 		buf = c.getBuffer(target)
 
 		for i := range names {
-			buf.users[names[i]] = true
+			nick := normalizeNick(names[i])
+			buf.users[nick] = true
 		}
 
 		buf = nil
@@ -361,7 +362,7 @@ func (c *Client) getBuffer(name string) *buffer {
 
 		name:  name,
 		topic: "",
-		users: make(map[string]string),
+		users: make(map[string]bool),
 	}
 
 	b := c.buffers[name]
@@ -539,6 +540,18 @@ func normalizeBufferName(buffer string) string {
 
 		return '_'
 	}, buffer)
+}
+
+// normalizeNick strips off user mode characters
+func normalizeNick(nick string) string {
+	return strings.TrimLeftFunc(nick, func(ch rune) bool {
+		switch ch {
+		case '%', '@', '~', '\\', '+':
+			return true
+		}
+
+		return false
+	})
 }
 
 // splitInputCommand returns `(command, param)` for a line of input

@@ -63,7 +63,9 @@ type buffer struct {
 
 	name  string
 	topic string
-	users map[string]string
+
+	// set of users that are present in the channel.
+	users map[string]bool
 }
 
 func NewClient(baseDir string, cfg NetworkConfiguration) *Client {
@@ -188,6 +190,17 @@ func (c *Client) listExistingChannels() []string {
 	return channels
 }
 
+func (c *Client) buffersContainingNick(nick string) []string {
+	buffers := []string{}
+	for name, buf := range c.buffers {
+		if _, ok := buf.users[nick]; ok {
+			buffers = append(buffers, name)
+		}
+	}
+
+	return buffers
+}
+
 func (c *Client) handleMessage(msg *irc.Message) {
 	buf := c.getBuffer(serverBufferName)
 
@@ -227,19 +240,55 @@ func (c *Client) handleMessage(msg *irc.Message) {
 		from := msg.Prefix.Name
 		to := msg.Params[0]
 
+		// Keep track of own renames.
 		if from == c.Nick {
 			c.Nick = to
+		}
 
-			text := fmt.Sprintf("changed nick from %s to %s", from, to)
-			buf.writeInfoMessage(text)
-		} else {
-			// TODO: broadcast renames to all bufs having that user?
-			// requires more tracking
-			buf = nil
+		line := fmt.Sprintf("%s changed nick to %s", from, to)
+
+		buffers := c.buffersContainingNick(from)
+		for _, name := range buffers {
+			buf := c.getBuffer(name)
+			delete(buf.users, from)
+			buf.users[to] = true
+			buf.writeInfoMessage(line)
 		}
 
 	case irc.JOIN:
 		buf = c.getBuffer(msg.Params[0])
+		buf.users[msg.Prefix.Name] = true
+
+	case irc.PART:
+		buf = c.getBuffer(msg.Params[0])
+		delete(buf.users, msg.Prefix.Name)
+
+		line := fmt.Sprintf("%s part: %s", msg.Prefix.Name, msg.Params[1])
+		buf.writeInfoMessage(line)
+
+	case irc.QUIT:
+		who := msg.Prefix.Name
+		line := fmt.Sprintf("%s quit: %s", who, msg.Params[0])
+
+		buffers := c.buffersContainingNick(who)
+		for _, name := range buffers {
+			buf := c.getBuffer(name)
+			delete(buf.users, who)
+			buf.writeInfoMessage(line)
+		}
+
+		buf = nil
+
+	case irc.RPL_NAMREPLY:
+		target := msg.Params[1]
+		names := strings.Split(" ", msg.Trailing())
+		buf = c.getBuffer(target)
+
+		for i := range names {
+			buf.users[names[i]] = true
+		}
+
+		buf = nil
 
 	case irc.PRIVMSG, irc.NOTICE:
 		target := msg.Params[0]
@@ -260,7 +309,8 @@ func (c *Client) handleMessage(msg *irc.Message) {
 		target := msg.Params[1]
 		topic := msg.Params[2]
 
-		c.getBuffer(target).topic = topic
+		buf = c.getBuffer(target)
+		buf.topic = topic
 
 	case irc.ERR_NICKNAMEINUSE:
 		c.Nick = c.Nick + "`"

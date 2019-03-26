@@ -263,7 +263,12 @@ func (c *Client) handleMessage(msg *irc.Message) {
 		buf = c.getBuffer(msg.Params[0])
 		delete(buf.users, msg.Prefix.Name)
 
-		line := fmt.Sprintf("%s part: %s", msg.Prefix.Name, msg.Params[1])
+		partMsg := "leaving"
+		if len(msg.Params) > 1 {
+			partMsg = msg.Params[1]
+		}
+
+		line := fmt.Sprintf("%s part: %s", msg.Prefix.Name, partMsg)
 		buf.writeInfoMessage(line)
 
 	case irc.QUIT:

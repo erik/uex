@@ -50,6 +50,30 @@ Client only supports some basic IRC commands.
 | `/quote MSG`       | Send `MSG` to server directly.                   |
 | `/me ACTION`       | Send CTCP ACTION.                                |
 
+Using `fzf` in conjuction with `uex` greatly improves the experience.
+Something like this will give you a nice switcher UI for jumping between
+buffers.
+
+``` bash
+UEX_DIR=/tmp/uex/
+
+uex () {
+  while true; do
+    channel=$(\
+        find $UEX_DIR -type d -mindepth 2 -print | \
+        sed "s;$UEX_DIR;;g" | \
+        fzf --preview="tail -50 $UEX_DIR{}/out" --preview-window down:75%\
+    )
+
+    if [ -z "$channel" ]; then
+      return
+    fi
+
+    uex-client "$UEX_DIR$channel"
+  done
+}
+```
+
 ## note
 
 It's probably not worth setting this up. It's very opinionated and

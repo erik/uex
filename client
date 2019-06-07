@@ -200,6 +200,11 @@ def input_loop(path, name, last_name):
                     return last_name
                 return split[1]
 
+            # ¯\_(ツ)_/¯
+            elif line.startswith('/shrug'):
+                rest = line[len('/shrug'):].strip()
+                line = '%s ¯\\_(ツ)_/¯' % rest
+
             # Force full re-render
             elif line == '/refresh':
                 return name

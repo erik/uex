@@ -78,9 +78,8 @@ class synchronized_writes:
 def tail_file(path, nlines=1000):
     return subprocess.Popen([
         'tail',
-        '-%d' % nlines,
-        '-F',
-        path
+        '-n', str(nlines),
+        '-F', path
     ], stdout=subprocess.PIPE)
 
 

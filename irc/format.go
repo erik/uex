@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"regexp"
-	"time"
 
 	"gopkg.in/sorcix/irc.v2"
 	"gopkg.in/sorcix/irc.v2/ctcp"
@@ -103,8 +102,8 @@ func stylizeLine(line string) string {
 }
 
 // formatMessage returns a string fit for printing to a terminal.
-func formatMessage(m *irc.Message) string {
-	ts := time.Now().Format(timestampFormat)
+func formatMessage(m *message) string {
+	ts := m.ts.Format(timestampFormat)
 	sender := alertSender
 	line := fmt.Sprintf("%s %s", m.Command, m.Trailing())
 

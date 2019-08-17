@@ -57,7 +57,7 @@ type Client struct {
 }
 
 type buffer struct {
-	ch     chan *irc.Message
+	ch     chan *message
 	client *Client
 	path   string
 
@@ -66,6 +66,16 @@ type buffer struct {
 
 	// set of users that are present in the channel.
 	users map[string]bool
+}
+
+type message struct {
+	irc.Message
+
+	ts time.Time
+}
+
+func messageNow(m irc.Message) message {
+	return message{Message: m, ts: time.Now().Local()}
 }
 
 func NewClient(baseDir string, cfg NetworkConfiguration) *Client {
@@ -90,6 +100,16 @@ func (c *Client) Connect() error {
 		c.send("PASS", c.ServerPass)
 	}
 
+	caps := []string{
+		"znc.in/server-time-iso",
+		"server-time",
+	}
+
+	for _, cap := range caps {
+		c.send("CAP", "REQ", cap)
+	}
+	c.sendRaw([]byte("CAP END"))
+
 	realName := c.RealName
 	if realName == "" {
 		realName = c.Nick
@@ -109,14 +129,38 @@ func (c *Client) Listen() error {
 	scanner := bufio.NewScanner(c.conn)
 	for scanner.Scan() {
 		line := scanner.Text()
-		message := irc.ParseMessage(line)
-		if message == nil {
+		ts := time.Now()
+
+		// sorcix/irc.v2 doesn't support IRCv3 tags. Parse them
+		// ourselves and strip them out.
+		if strings.HasPrefix(line, "@") {
+			// split into (tags, line)
+			parts := strings.SplitN(line, " ", 2)
+			tags := parts[0][1:len(parts[0])]
+			line = parts[1]
+
+			for _, tag := range strings.Split(tags, ";") {
+				kv := strings.SplitN(tag, "=", 2)
+				switch kv[0] {
+				case "time":
+					ts, _ = time.Parse("2006-01-02T15:04:05.999Z", kv[1])
+				}
+
+			}
+		}
+		ts = ts.Local()
+
+		msg := irc.ParseMessage(line)
+		if msg == nil {
 			fmt.Printf("[%s] <-- invalid message: %s\n", c.Name, line)
 			continue
 		}
 
-		fmt.Printf("[%s] <-- %+v\n", c.Name, message)
-		c.handleMessage(message)
+		fmt.Printf("[%s] <-- %+v\n", c.Name, msg)
+		c.handleMessage(&message{
+			Message: *msg,
+			ts:      ts,
+		})
 	}
 
 	return scanner.Err()
@@ -153,10 +197,10 @@ func (c *Client) dial() error {
 }
 
 func (c *Client) send(cmd string, params ...string) {
-	msg := &irc.Message{
+	msg := messageNow(irc.Message{
 		Command: cmd,
 		Params:  params,
-	}
+	})
 
 	c.sendRaw(msg.Bytes())
 }
@@ -201,7 +245,7 @@ func (c *Client) buffersContainingNick(nick string) []string {
 	return buffers
 }
 
-func (c *Client) handleMessage(msg *irc.Message) {
+func (c *Client) handleMessage(msg *message) {
 	buf := c.getBuffer(serverBufferName)
 
 	switch msg.Command {
@@ -361,7 +405,7 @@ func (c *Client) getBuffer(name string) *buffer {
 	}
 
 	c.buffers[name] = buffer{
-		ch:     make(chan *irc.Message),
+		ch:     make(chan *message),
 		client: c,
 		path:   path,
 
@@ -395,11 +439,11 @@ func (c *Client) handleInputLine(bufName, line string) {
 		}
 
 		buf := c.getBuffer(s[0])
-		buf.addMessage(irc.Message{
+		buf.addMessage(messageNow(irc.Message{
 			Prefix:  &irc.Prefix{Name: c.Nick},
 			Command: irc.PRIVMSG,
 			Params:  []string{s[1]},
-		})
+		}))
 
 		c.send("PRIVMSG", s[0], s[1])
 
@@ -407,11 +451,12 @@ func (c *Client) handleInputLine(bufName, line string) {
 		action := ctcp.Action(rest)
 
 		buf := c.getBuffer(bufName)
-		buf.ch <- &irc.Message{
+		m := messageNow(irc.Message{
 			Prefix:  &irc.Prefix{Name: c.Nick},
 			Command: irc.PRIVMSG,
 			Params:  []string{action},
-		}
+		})
+		buf.ch <- &m
 
 		c.send("PRIVMSG", bufName, action)
 
@@ -454,16 +499,16 @@ func (c *Client) handleInputLine(bufName, line string) {
 	}
 }
 
-func (b *buffer) addMessage(m irc.Message) {
+func (b *buffer) addMessage(m message) {
 	b.ch <- &m
 }
 
 func (b *buffer) writeInfoMessage(msg string) {
-	b.addMessage(irc.Message{
+	b.addMessage(messageNow(irc.Message{
 		Prefix:  &irc.Prefix{Name: "uex"},
 		Command: "*",
 		Params:  []string{msg},
-	})
+	}))
 }
 
 func (b *buffer) outputHandler() {

@@ -49,7 +49,7 @@ Client only supports some basic IRC commands.
 | `/j[oin] CHANNEL`  | Join a channel.                                  |
 | `/quote MSG`       | Send `MSG` to server directly.                   |
 | `/me ACTION`       | Send CTCP ACTION.                                |
-| `/shrug [TEXT]`    | ¯\\\_(ツ)\_/¯                                    | 
+| `/shrug [TEXT]`    | ¯\\\_(ツ)\_/¯                                    |
 
 Using `fzf` in conjuction with `uex` greatly improves the experience.
 Something like this will give you a nice switcher UI for jumping between

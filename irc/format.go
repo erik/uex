@@ -102,7 +102,7 @@ func stylizeLine(line string) string {
 }
 
 // formatMessage returns a string fit for printing to a terminal.
-func formatMessage(m *message) string {
+func formatMessage(m message) string {
 	ts := m.ts.Format(timestampFormat)
 	sender := alertSender
 	line := fmt.Sprintf("%s %s", m.Command, m.Trailing())

@@ -57,7 +57,7 @@ type Client struct {
 }
 
 type buffer struct {
-	ch     chan *message
+	ch     chan message
 	client *Client
 	path   string
 
@@ -68,13 +68,17 @@ type buffer struct {
 	users map[string]bool
 }
 
+// IRC message with a timestamp of when it was sent (possibly set by the server
+// using the `server-time` capability)
 type message struct {
 	irc.Message
-
 	ts time.Time
 }
 
-func messageNow(m irc.Message) message {
+// wrapMessage is a simple convenience function for turning an irc.Message into
+// a timestamped message. Assumes that the message was sent at the instance the
+// function was called.
+func wrapMessage(m irc.Message) message {
 	return message{Message: m, ts: time.Now().Local()}
 }
 
@@ -148,6 +152,7 @@ func (c *Client) Listen() error {
 
 			}
 		}
+		// UTC isn't useful here.
 		ts = ts.Local()
 
 		msg := irc.ParseMessage(line)
@@ -157,7 +162,7 @@ func (c *Client) Listen() error {
 		}
 
 		fmt.Printf("[%s] <-- %+v\n", c.Name, msg)
-		c.handleMessage(&message{
+		c.handleMessage(message{
 			Message: *msg,
 			ts:      ts,
 		})
@@ -197,7 +202,7 @@ func (c *Client) dial() error {
 }
 
 func (c *Client) send(cmd string, params ...string) {
-	msg := messageNow(irc.Message{
+	msg := wrapMessage(irc.Message{
 		Command: cmd,
 		Params:  params,
 	})
@@ -245,7 +250,7 @@ func (c *Client) buffersContainingNick(nick string) []string {
 	return buffers
 }
 
-func (c *Client) handleMessage(msg *message) {
+func (c *Client) handleMessage(msg message) {
 	buf := c.getBuffer(serverBufferName)
 
 	switch msg.Command {
@@ -405,7 +410,7 @@ func (c *Client) getBuffer(name string) *buffer {
 	}
 
 	c.buffers[name] = buffer{
-		ch:     make(chan *message),
+		ch:     make(chan message),
 		client: c,
 		path:   path,
 
@@ -439,11 +444,11 @@ func (c *Client) handleInputLine(bufName, line string) {
 		}
 
 		buf := c.getBuffer(s[0])
-		buf.addMessage(messageNow(irc.Message{
+		buf.ch <- wrapMessage(irc.Message{
 			Prefix:  &irc.Prefix{Name: c.Nick},
 			Command: irc.PRIVMSG,
 			Params:  []string{s[1]},
-		}))
+		})
 
 		c.send("PRIVMSG", s[0], s[1])
 
@@ -451,12 +456,11 @@ func (c *Client) handleInputLine(bufName, line string) {
 		action := ctcp.Action(rest)
 
 		buf := c.getBuffer(bufName)
-		m := messageNow(irc.Message{
+		buf.ch <- wrapMessage(irc.Message{
 			Prefix:  &irc.Prefix{Name: c.Nick},
 			Command: irc.PRIVMSG,
 			Params:  []string{action},
 		})
-		buf.ch <- &m
 
 		c.send("PRIVMSG", bufName, action)
 
@@ -499,16 +503,12 @@ func (c *Client) handleInputLine(bufName, line string) {
 	}
 }
 
-func (b *buffer) addMessage(m message) {
-	b.ch <- &m
-}
-
 func (b *buffer) writeInfoMessage(msg string) {
-	b.addMessage(messageNow(irc.Message{
+	b.ch <- wrapMessage(irc.Message{
 		Prefix:  &irc.Prefix{Name: "uex"},
 		Command: "*",
 		Params:  []string{msg},
-	}))
+	})
 }
 
 func (b *buffer) outputHandler() {

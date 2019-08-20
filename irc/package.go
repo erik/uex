@@ -268,7 +268,7 @@ func (c *Client) handleMessage(msg message) {
 	case irc.PING:
 		c.send(irc.PONG, msg.Params...)
 
-	case irc.PONG:
+	case irc.PONG: // PONG #channel timestamp
 		if len(msg.Params) != 2 {
 			break
 		}
@@ -282,7 +282,8 @@ func (c *Client) handleMessage(msg message) {
 			delta := time.Duration(time.Now().UnixNano()-ts) / time.Millisecond
 			text := fmt.Sprintf("PONG from %s: %d ms", msg.Params[0], delta)
 
-			buf.writeInfoMessage(text)
+			c.getBuffer(s[0]).writeInfoMessage(text)
+			buf = nil
 		}
 
 	case irc.NICK:

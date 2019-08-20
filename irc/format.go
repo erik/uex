@@ -15,16 +15,41 @@ const (
 	resetColors     = "\x1B[0m"
 )
 
-// TODO: Maybe use 256 color mode? \x1b[38;5;NUMBERm
-var nickColors = []string{
-	"", "\x1B[30;1m", "\x1B[30;2m",
-	"\x1B[31m", "\x1B[31;1m", "\x1B[31;2m",
-	"\x1B[32m", "\x1B[32;1m", "\x1B[32;2m",
-	"\x1B[33m", "\x1B[33;1m", "\x1B[33;2m",
-	"\x1B[34m", "\x1B[34;1m", "\x1B[34;2m",
-	"\x1B[35m", "\x1B[35;1m", "\x1B[35;2m",
-	"\x1B[36m", "\x1B[36;1m", "\x1B[36;2m",
-}
+var (
+	// TODO: Maybe use 256 color mode? \x1b[38;5;NUMBERm
+	nickColors = []string{
+		"", "\x1B[30;1m", "\x1B[30;2m",
+		"\x1B[31m", "\x1B[31;1m", "\x1B[31;2m",
+		"\x1B[32m", "\x1B[32;1m", "\x1B[32;2m",
+		"\x1B[33m", "\x1B[33;1m", "\x1B[33;2m",
+		"\x1B[34m", "\x1B[34;1m", "\x1B[34;2m",
+		"\x1B[35m", "\x1B[35;1m", "\x1B[35;2m",
+		"\x1B[36m", "\x1B[36;1m", "\x1B[36;2m",
+	}
+
+	// https://github.com/myano/jenni/wiki/IRC-String-Formatting
+	// https://misc.flogisoft.com/bash/tip_colors_and_formatting
+	ircToTerm = map[string]string{
+		"00": "37",   // white
+		"01": "30",   // black
+		"02": "34",   // blue (navy)
+		"03": "32",   // green
+		"04": "31",   // red
+		"05": "35",   // brown (maroon)
+		"06": "35;1", // purple
+		"07": "33",   // orange (olive)
+		"08": "33;1", // yellow
+		"09": "32;1", // light green (lime)
+		"10": "34;1", // teal (a green/blue cyan)
+		"11": "34;1", // light cyan (cyan / aqua)
+		"12": "34;1", // light blue (royal)
+		"13": "37;1", // pink (light purple / fuchsia)
+		"14": "37;1", // grey
+		"15": "37;1", // light grey (silver)
+	}
+
+	ircColorCodes = regexp.MustCompile("[\x02\x1D\x0F\x1F]|(\x03(?:\\d\\d(?:,\\d\\d)?)?)")
+)
 
 // colorizeNick takes the given nick and wraps it with ANSI terminal
 // codes to colorize it. The nick is hashed to make sure that the
@@ -40,31 +65,9 @@ func colorizeNick(nick string) string {
 	return fmt.Sprintf("%s%15s%s", col, nick, resetColors)
 }
 
-// https://github.com/myano/jenni/wiki/IRC-String-Formatting
-// https://misc.flogisoft.com/bash/tip_colors_and_formatting
-var ircToTerm = map[string]string{
-	"00": "37",   // white
-	"01": "30",   // black
-	"02": "34",   // blue (navy)
-	"03": "32",   // green
-	"04": "31",   // red
-	"05": "35",   // brown (maroon)
-	"06": "35;1", // purple
-	"07": "33",   // orange (olive)
-	"08": "33;1", // yellow
-	"09": "32;1", // light green (lime)
-	"10": "34;1", // teal (a green/blue cyan)
-	"11": "34;1", // light cyan (cyan / aqua)
-	"12": "34;1", // light blue (royal)
-	"13": "37;1", // pink (light purple / fuchsia)
-	"14": "37;1", // grey
-	"15": "37;1", // light grey (silver)
-}
-
 // stylizeLine converts IRC formatting codes to ANSI terminal codes.
 func stylizeLine(line string) string {
-	r := regexp.MustCompile("[\x02\x1D\x0F\x1F]|(\x03(?:\\d\\d(?:,\\d\\d)?)?)")
-	line = r.ReplaceAllStringFunc(line, func(m string) string {
+	line = ircColorCodes.ReplaceAllStringFunc(line, func(m string) string {
 		code := "0"
 		switch m[0] {
 		// Bold

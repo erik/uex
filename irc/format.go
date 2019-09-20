@@ -48,7 +48,7 @@ var (
 		"15": "37;1", // light grey (silver)
 	}
 
-	ircColorCodes = regexp.MustCompile("[\x02\x1D\x0F\x1F]|(\x03(?:\\d\\d(?:,\\d\\d)?)?)")
+	ircColorCodes = regexp.MustCompile("[\x02\x1D\x0F\x16\x1F]|(\x03(?:\\d\\d(?:,\\d\\d)?)?)")
 )
 
 // colorizeNick takes the given nick and wraps it with ANSI terminal
@@ -104,8 +104,13 @@ func stylizeLine(line string) string {
 	return line + "\x1B[0m"
 }
 
+func (c *Client) shouldHighlight(l string) bool {
+	re := regexp.MustCompile(fmt.Sprintf("\\b%s\\b", c.Nick))
+	return re.MatchString(l)
+}
+
 // formatMessage returns a string fit for printing to a terminal.
-func formatMessage(m message) string {
+func (c *Client) formatMessage(m message) string {
 	ts := m.ts.Format(timestampFormat)
 	sender := alertSender
 	line := fmt.Sprintf("%s %s", m.Command, m.Trailing())
@@ -119,6 +124,11 @@ func formatMessage(m message) string {
 		if tag, text, ok := ctcp.Decode(m.Trailing()); ok && tag == "ACTION" {
 			sender = alertSender
 			line = fmt.Sprintf("%s %s", m.Prefix.Name, text)
+		}
+
+		// Invert the line if it matches the current nick.
+		if c.shouldHighlight(line) {
+			line = "\x16" + line
 		}
 
 		line = stylizeLine(line)

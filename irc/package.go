@@ -420,12 +420,12 @@ func (c *Client) getBuffer(name string) *buffer {
 		users: make(map[string]bool),
 	}
 
-	b := c.buffers[name]
+	buf := c.buffers[name]
 
-	go b.inputHandler()
-	go b.outputHandler()
+	go buf.inputHandler()
+	go buf.outputHandler()
 
-	return &b
+	return &buf
 }
 
 func (c *Client) handleInputLine(bufName, line string) {
@@ -504,14 +504,6 @@ func (c *Client) handleInputLine(bufName, line string) {
 	}
 }
 
-func (b *buffer) writeInfoMessage(msg string) {
-	b.ch <- wrapMessage(irc.Message{
-		Prefix:  &irc.Prefix{Name: "uex"},
-		Command: "*",
-		Params:  []string{msg},
-	})
-}
-
 func (b *buffer) outputHandler() {
 	name := filepath.Join(b.path, outputFileName)
 	mode := os.O_APPEND | os.O_RDWR | os.O_CREATE
@@ -522,9 +514,9 @@ func (b *buffer) outputHandler() {
 
 	defer file.Close()
 
-	// TODO: better serialization?? colors?? etc.
+	// TODO: better serialization?? etc.
 	for msg := range b.ch {
-		text := formatMessage(msg)
+		text := b.client.formatMessage(msg)
 		if text == "" {
 			continue
 		}
@@ -536,6 +528,14 @@ func (b *buffer) outputHandler() {
 			log.Fatal(err)
 		}
 	}
+}
+
+func (b *buffer) writeInfoMessage(msg string) {
+	b.ch <- wrapMessage(irc.Message{
+		Prefix:  &irc.Prefix{Name: "uex"},
+		Command: "*",
+		Params:  []string{msg},
+	})
 }
 
 func (b *buffer) inputHandler() {

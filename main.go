@@ -25,7 +25,7 @@ const (
 )
 
 func main() {
-	path := flag.String("-c", "", "Configuration file to use for connection [default: ./uex.config.json]")
+	path := flag.String("config", "", "Configuration file to use for connection [default: ./uex.config.json]")
 	flag.Parse()
 
 	if *path == "" {

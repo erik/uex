@@ -372,6 +372,22 @@ func (c *Client) handleMessage(msg message) {
 		c.Nick = c.Nick + "`"
 		fmt.Printf("Nick in use, trying '%s'\n", c.Nick)
 		c.send("NICK", c.Nick)
+
+	case irc.MODE:
+		who := msg.Prefix.Name
+		target := msg.Params[0]
+		mode := strings.Join(msg.Params[1:], " ")
+
+		line := fmt.Sprintf("%s set mode for %s: %s", who, target, mode)
+
+		if !isChannel(target) {
+			target = serverBufferName
+		}
+
+		buf = c.getBuffer(target)
+		buf.writeInfoMessage(line)
+
+		buf = nil
 	}
 
 	if buf != nil {

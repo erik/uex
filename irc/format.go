@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"regexp"
+	"strings"
 
 	"gopkg.in/sorcix/irc.v2"
 	"gopkg.in/sorcix/irc.v2/ctcp"
@@ -113,7 +114,7 @@ func (c *Client) shouldHighlight(l string) bool {
 func (c *Client) formatMessage(m message) string {
 	ts := m.ts.Format(timestampFormat)
 	sender := alertSender
-	line := fmt.Sprintf("%s %s", m.Command, m.Trailing())
+	line := fmt.Sprintf("%s %s", m.Command, strings.Join(m.Params, " "))
 
 	switch m.Command {
 	case irc.PRIVMSG, irc.NOTICE:

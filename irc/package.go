@@ -186,7 +186,7 @@ func (c *Client) dial() error {
 	if err = tcpc.SetKeepAlive(true); err != nil {
 		return err
 	}
-	if err = tcpc.SetKeepAlivePeriod(5 * time.Minute); err != nil {
+	if err = tcpc.SetKeepAlivePeriod(30 * time.Second); err != nil {
 		return err
 	}
 

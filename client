@@ -140,7 +140,6 @@ def _print_lines(out, completer):
         Term.write(Term.RESET)
 
     for line in out:
-        # TODO: possibly wrap lines if they're wider than the term?
         line = line.decode('utf-8', 'replace').rstrip()
 
         completer.add(_extract_nick(line))
@@ -210,7 +209,11 @@ def input_loop(path, name, last_name):
 
             write_line(line)
 
-        except (KeyboardInterrupt, EOFError):
+        # Interrupt triggers rerender
+        except KeyboardInterrupt:
+            return name
+
+        except EOFError:
             break
 
 

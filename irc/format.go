@@ -5,15 +5,17 @@ import (
 	"hash/fnv"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/sorcix/irc.v2"
 	"gopkg.in/sorcix/irc.v2/ctcp"
 )
 
 const (
-	timestampFormat = "15:04:05"
-	alertSender     = "~!~"
-	resetColors     = "\x1B[0m"
+	timestampFormat     = "15:04:05"
+	timestampDateFormat = "Jan 02 2006\n15:04:05"
+	alertSender         = "~!~"
+	resetColors         = "\x1B[0m"
 )
 
 var (
@@ -111,10 +113,19 @@ func (c *Client) shouldHighlight(l string) bool {
 }
 
 // formatMessage returns a string fit for printing to a terminal.
-func (c *Client) formatMessage(m message) string {
-	ts := m.ts.Format(timestampFormat)
+func (c *Client) formatMessage(m message, currentDate *time.Time) string {
+	tsFormat := timestampFormat
 	sender := alertSender
 	line := fmt.Sprintf("%s %s", m.Command, strings.Join(m.Params, " "))
+
+	// Check if the day has rolled over since the last message in this buffer.
+	midnight := time.Date(m.ts.Year(), m.ts.Month(), m.ts.Day(), 0, 0, 0, 0, time.Local)
+	if midnight != *currentDate {
+		*currentDate = midnight
+		tsFormat = timestampDateFormat
+	}
+
+	ts := m.ts.Format(tsFormat)
 
 	switch m.Command {
 	case irc.PRIVMSG, irc.NOTICE:

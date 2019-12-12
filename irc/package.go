@@ -530,9 +530,13 @@ func (b *buffer) outputHandler() {
 
 	defer file.Close()
 
+	// Keep track of the date of the last message so that we can add
+	// formatting for day changes.
+	currentDate := time.Time{}
+
 	// TODO: better serialization?? etc.
 	for msg := range b.ch {
-		text := b.client.formatMessage(msg)
+		text := b.client.formatMessage(msg, &currentDate)
 		if text == "" {
 			continue
 		}

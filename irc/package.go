@@ -101,7 +101,9 @@ func (c *Client) Connect() error {
 	}
 
 	if c.ServerPass != "" {
-		c.send("PASS", c.ServerPass)
+		if err := c.send("PASS", c.ServerPass); err != nil {
+			return err
+		}
 	}
 
 	caps := []string{
@@ -112,15 +114,21 @@ func (c *Client) Connect() error {
 	for _, cap := range caps {
 		c.send("CAP", "REQ", cap)
 	}
-	c.sendRaw([]byte("CAP END"))
+	if err := c.sendRaw([]byte("CAP END")); err != nil {
+		return err
+	}
 
 	realName := c.RealName
 	if realName == "" {
 		realName = c.Nick
 	}
 
-	c.send("NICK", c.Nick)
-	c.send("USER", c.Nick, "*", "*", realName)
+	if err := c.send("NICK", c.Nick); err != nil {
+		return err
+	}
+	if err := c.send("USER", c.Nick, "*", "*", realName); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -162,10 +170,12 @@ func (c *Client) Listen() error {
 		}
 
 		fmt.Printf("[%s] <-- %+v\n", c.Name, msg)
-		c.handleMessage(message{
+		if err := c.handleMessage(message{
 			Message: *msg,
 			ts:      ts,
-		})
+		}); err != nil {
+			return err
+		}
 	}
 
 	return scanner.Err()
@@ -201,23 +211,25 @@ func (c *Client) dial() error {
 	return nil
 }
 
-func (c *Client) send(cmd string, params ...string) {
+func (c *Client) send(cmd string, params ...string) error {
 	msg := wrapMessage(irc.Message{
 		Command: cmd,
 		Params:  params,
 	})
 
-	c.sendRaw(msg.Bytes())
+	return c.sendRaw(msg.Bytes())
 }
 
-func (c *Client) sendRaw(msg []byte) {
+func (c *Client) sendRaw(msg []byte) error {
 	line := append(msg, '\r', '\n')
 
 	if _, err := c.conn.Write(line); err != nil {
 		log.Printf("Failed to write... %+v\n", err)
+		return err
 	}
 
 	fmt.Printf("[%s] --> %+v\n", c.Name, string(msg))
+	return nil
 }
 
 // listExistingChannels returns a list of channel names that were
@@ -250,23 +262,29 @@ func (c *Client) buffersContainingNick(nick string) []string {
 	return buffers
 }
 
-func (c *Client) handleMessage(msg message) {
+func (c *Client) handleMessage(msg message) error {
 	buf := c.getBuffer(serverBufferName)
 
 	switch msg.Command {
 	case irc.RPL_WELCOME:
 		for _, msg := range c.OnConnect {
-			c.sendRaw([]byte(msg))
+			if err := c.sendRaw([]byte(msg)); err != nil {
+				return err
+			}
 		}
 
 		if c.RejoinExisting {
 			for _, ch := range c.listExistingChannels() {
-				c.send(irc.JOIN, ch)
+				if err := c.send(irc.JOIN, ch); err != nil {
+					return err
+				}
 			}
 		}
 
 	case irc.PING:
-		c.send(irc.PONG, msg.Params...)
+		if err := c.send(irc.PONG, msg.Params...); err != nil {
+			return err
+		}
 
 	case irc.PONG: // PONG #channel timestamp
 		if len(msg.Params) != 2 {
@@ -371,7 +389,9 @@ func (c *Client) handleMessage(msg message) {
 	case irc.ERR_NICKNAMEINUSE:
 		c.Nick = c.Nick + "`"
 		fmt.Printf("Nick in use, trying '%s'\n", c.Nick)
-		c.send("NICK", c.Nick)
+		if err := c.send("NICK", c.Nick); err != nil {
+			return err
+		}
 
 	case irc.MODE:
 		who := msg.Prefix.Name
@@ -393,6 +413,8 @@ func (c *Client) handleMessage(msg message) {
 	if buf != nil {
 		buf.ch <- msg
 	}
+
+	return nil
 }
 
 func (c *Client) serverBuffer() *buffer {
@@ -444,7 +466,7 @@ func (c *Client) getBuffer(name string) *buffer {
 	return &buf
 }
 
-func (c *Client) handleInputLine(bufName, line string) {
+func (c *Client) handleInputLine(bufName, line string) error {
 	fmt.Printf("[%s/%s] >> %s\n", c.Name, bufName, line)
 
 	cmd, rest := splitInputCommand(bufName, line)
@@ -454,10 +476,10 @@ func (c *Client) handleInputLine(bufName, line string) {
 		s := strings.SplitN(rest, " ", 2)
 		if len(s) != 2 {
 			c.serverBuffer().writeInfoMessage("expected: /msg TARGET MESSAGE")
-			return
+			return nil
 		} else if s[0] == serverBufferName {
 			c.serverBuffer().writeInfoMessage("can't PRIVMSG a server.")
-			return
+			return nil
 		}
 
 		buf := c.getBuffer(s[0])
@@ -467,7 +489,9 @@ func (c *Client) handleInputLine(bufName, line string) {
 			Params:  []string{s[1]},
 		})
 
-		c.send("PRIVMSG", s[0], s[1])
+		if err := c.send("PRIVMSG", s[0], s[1]); err != nil {
+			return err
+		}
 
 	case "/me":
 		action := ctcp.Action(rest)
@@ -479,14 +503,18 @@ func (c *Client) handleInputLine(bufName, line string) {
 			Params:  []string{action},
 		})
 
-		c.send("PRIVMSG", bufName, action)
+		if err := c.send("PRIVMSG", bufName, action); err != nil {
+			return err
+		}
 
 	case "/j", "/join":
 		if !isChannel(rest) {
 			c.getBuffer(bufName).writeInfoMessage("expected: /join TARGET")
-			return
+			return nil
 		}
-		c.send("JOIN", rest)
+		if err := c.send("JOIN", rest); err != nil {
+			return err
+		}
 
 	case "/l", "/list":
 		buf := c.getBuffer(bufName)
@@ -498,14 +526,20 @@ func (c *Client) handleInputLine(bufName, line string) {
 
 	case "/ping":
 		ts := time.Now().UnixNano()
-		c.send("PING", fmt.Sprintf("%s %d", bufName, ts))
+		if err := c.send("PING", fmt.Sprintf("%s %d", bufName, ts)); err != nil {
+			return err
+		}
 
 	case "/quote":
 		params := strings.Split(rest, " ")
 		if len(params) == 1 {
-			c.send(params[0])
+			if err := c.send(params[0]); err != nil {
+				return err
+			}
 		} else {
-			c.send(params[0], params[1:]...)
+			if err := c.send(params[0], params[1:]...); err != nil {
+				return err
+			}
 		}
 
 	case "/r", "/reconnect":
@@ -518,6 +552,7 @@ func (c *Client) handleInputLine(bufName, line string) {
 		text := fmt.Sprintf("Unknown command: %s %s", cmd, rest)
 		c.getBuffer(bufName).writeInfoMessage(text)
 	}
+	return nil
 }
 
 func (b *buffer) outputHandler() {

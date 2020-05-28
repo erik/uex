@@ -408,6 +408,16 @@ func (c *Client) handleMessage(msg message) error {
 		buf.writeInfoMessage(line)
 
 		buf = nil
+
+	case irc.ERROR:
+		msg := strings.Join(msg.Params[1:], " ")
+
+		line := fmt.Sprintf("[ERROR]: %s", msg)
+
+		c.serverBuffer().writeInfoMessage(line)
+		c.serverBuffer().writeInfoMessage("attempting reconnect...")
+
+		return fmt.Errorf("Network sent ERROR msg: %s", msg)
 	}
 
 	if buf != nil {
@@ -489,9 +499,7 @@ func (c *Client) handleInputLine(bufName, line string) error {
 			Params:  []string{s[1]},
 		})
 
-		if err := c.send("PRIVMSG", s[0], s[1]); err != nil {
-			return err
-		}
+		return c.send("PRIVMSG", s[0], s[1])
 
 	case "/me":
 		action := ctcp.Action(rest)
@@ -503,18 +511,14 @@ func (c *Client) handleInputLine(bufName, line string) error {
 			Params:  []string{action},
 		})
 
-		if err := c.send("PRIVMSG", bufName, action); err != nil {
-			return err
-		}
+		return c.send("PRIVMSG", bufName, action)
 
 	case "/j", "/join":
 		if !isChannel(rest) {
 			c.getBuffer(bufName).writeInfoMessage("expected: /join TARGET")
 			return nil
 		}
-		if err := c.send("JOIN", rest); err != nil {
-			return err
-		}
+		return c.send("JOIN", rest)
 
 	case "/l", "/list":
 		buf := c.getBuffer(bufName)
@@ -526,26 +530,20 @@ func (c *Client) handleInputLine(bufName, line string) error {
 
 	case "/ping":
 		ts := time.Now().UnixNano()
-		if err := c.send("PING", fmt.Sprintf("%s %d", bufName, ts)); err != nil {
-			return err
-		}
-
+		return c.send("PING", fmt.Sprintf("%s %d", bufName, ts))
 	case "/quote":
 		params := strings.Split(rest, " ")
 		if len(params) == 1 {
-			if err := c.send(params[0]); err != nil {
-				return err
-			}
+			return c.send(params[0])
 		} else {
-			if err := c.send(params[0], params[1:]...); err != nil {
-				return err
-			}
+			return c.send(params[0], params[1:]...)
 		}
 
 	case "/r", "/reconnect":
 		c.serverBuffer().writeInfoMessage("... disconnecting")
 		if err := c.conn.Close(); err != nil {
 			fmt.Printf("failed to close: %+v\n", err)
+			return err
 		}
 
 	default:

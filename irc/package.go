@@ -22,9 +22,11 @@ import (
 )
 
 const (
-	serverBufferName = "$server"
-	inputFileName    = "in"
-	outputFileName   = "out"
+	serverBufferName  = "$server"
+	mentionBufferName = "$mentions"
+
+	inputFileName  = "in"
+	outputFileName = "out"
 )
 
 // NetworkConfiguration contains the configuration for a connection to
@@ -366,6 +368,7 @@ func (c *Client) handleMessage(msg message) error {
 
 	case irc.PRIVMSG, irc.NOTICE:
 		target := msg.Params[0]
+		isMention := false
 
 		// Group all messages sent by the server together,
 		// regardless of server name.
@@ -375,6 +378,19 @@ func (c *Client) handleMessage(msg message) error {
 			target = serverBufferName
 		} else if !isChannel(target) {
 			target = msg.Prefix.Name
+			// All direct messages should be considered mentions
+			isMention = true
+		} else if c.shouldHighlight(msg.Trailing()) {
+			isMention = true
+		}
+
+		if isMention {
+			mention := msg
+			// Copy so we don't clobber the original
+			mention.Params = make([]string, len(mention.Params))
+			copy(mention.Params, msg.Params)
+			mention.Params[len(mention.Params)-1] = fmt.Sprintf("[%s]: %s", target, msg.Trailing())
+			c.mentionBuffer().ch <- mention
 		}
 
 		buf = c.getBuffer(target)
@@ -429,6 +445,10 @@ func (c *Client) handleMessage(msg message) error {
 
 func (c *Client) serverBuffer() *buffer {
 	return c.getBuffer(serverBufferName)
+}
+
+func (c *Client) mentionBuffer() *buffer {
+	return c.getBuffer(mentionBufferName)
 }
 
 func (c *Client) getBuffer(name string) *buffer {
@@ -489,6 +509,9 @@ func (c *Client) handleInputLine(bufName, line string) error {
 			return nil
 		} else if s[0] == serverBufferName {
 			c.serverBuffer().writeInfoMessage("can't PRIVMSG a server.")
+			return nil
+		} else if s[0] == mentionBufferName {
+			c.mentionBuffer().writeInfoMessage("can't PRIVMSG your mentions.")
 			return nil
 		}
 

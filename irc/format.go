@@ -57,7 +57,7 @@ var (
 // colorizeNick takes the given nick and wraps it with ANSI terminal
 // codes to colorize it. The nick is hashed to make sure that the
 // coloring is stable.
-func colorizeNick(nick string) string {
+func colorizeNick(nick string, addPadding bool) string {
 	h := fnv.New32a()
 	h.Write([]byte(nick))
 
@@ -65,7 +65,11 @@ func colorizeNick(nick string) string {
 	i := int(h.Sum32() % uint32(len(nickColors)))
 	col := nickColors[i]
 
-	return fmt.Sprintf("%s%15s%s", col, nick, resetColors)
+	if addPadding {
+		nick = fmt.Sprintf("%15s", nick)
+	}
+
+	return fmt.Sprintf("%s%s%s", col, nick, resetColors)
 }
 
 // stylizeLine converts IRC formatting codes to ANSI terminal codes.
@@ -137,7 +141,7 @@ func (c *Client) formatMessage(m message, currentDate *time.Time) string {
 		// Handle CTCP ACTIONS
 		if tag, text, ok := ctcp.Decode(m.Trailing()); ok && tag == "ACTION" {
 			sender = alertSender
-			line = fmt.Sprintf("%s %s", m.Prefix.Name, text)
+			line = fmt.Sprintf("%s %s", colorizeNick(m.Prefix.Name, false), text)
 		}
 
 		// Invert the line if it matches the current nick.
@@ -170,5 +174,5 @@ func (c *Client) formatMessage(m message, currentDate *time.Time) string {
 		lineColor = "\x1B[2m"
 	}
 
-	return fmt.Sprintf("\x1B[2m%s\x1B[0m %s %s%s\x1B[0m", ts, colorizeNick(sender), lineColor, line)
+	return fmt.Sprintf("\x1B[2m%s\x1B[0m %s %s%s\x1B[0m", ts, colorizeNick(sender, true), lineColor, line)
 }

@@ -126,9 +126,11 @@ func (c *Client) formatMessage(m message, currentDate *time.Time) string {
 	}
 
 	ts := m.ts.Format(tsFormat)
+	shouldDim := true
 
 	switch m.Command {
 	case irc.PRIVMSG, irc.NOTICE:
+		shouldDim = false
 		sender = m.Prefix.Name
 		line = m.Trailing()
 
@@ -163,5 +165,10 @@ func (c *Client) formatMessage(m message, currentDate *time.Time) string {
 		return ""
 	}
 
-	return fmt.Sprintf("\x1B[2m%s\x1B[0m %s %s", ts, colorizeNick(sender), line)
+	lineColor := ""
+	if shouldDim {
+		lineColor = "\x1B[2m"
+	}
+
+	return fmt.Sprintf("\x1B[2m%s\x1B[0m %s %s%s\x1B[0m", ts, colorizeNick(sender), lineColor, line)
 }

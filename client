@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import abc
 import os
 import os.path
 import re
@@ -83,11 +84,71 @@ def tail_file(path, nlines=1000):
     ], stdout=subprocess.PIPE)
 
 
-_next_redraw_at = None
-_redraw_event = threading.Event()
+class Throttler(abc.ABC):
+    def __init__(self):
+        self._next_commit_at = None
+        self._event = threading.Event()
+
+    def start_thread(self):
+        def _wrapper():
+            return self._loop()
+
+        return threading.Thread(
+            target=_wrapper,
+            daemon=True
+        ).start()
+
+    def _loop(self):
+        while True:
+            self._event.wait()
+            self._event.clear()
+
+            time.sleep(max(self._next_commit_at - time.time(), 0))
+
+            if not self._event.is_set():
+                self.commit()
+
+    def schedule(self, delay_ms):
+        self._next_commit_at = time.time() + (delay_ms / 1000.0)
+        self._event.set()
+
+    @abc.abstractmethod
+    def commit(self):
+        ...
 
 
-def _redraw_debouncer():
+class WriteThrottler(Throttler):
+    def __init__(self, out_path):
+        super().__init__()
+
+        self._write_buffer = []
+        self._out_path = out_path
+
+    def write(self, line):
+        with synchronized_writes():
+            self._write_buffer.append(line)
+            self.schedule(delay_ms=100)
+
+    def commit(self):
+        with synchronized_writes():
+            num_lines = len(self._write_buffer)
+            if num_lines > 1:
+                prompt = (
+                    f"Send {num_lines} lines of text? [y/N] "
+                )
+
+                if input(prompt).strip() != 'y':
+                    self._write_buffer = []
+                    return
+
+            with open(self._out_path, 'wb', buffering=0) as fifo:
+                while self._write_buffer:
+                    line = self._write_buffer.pop(0)
+                    byte_str = (line + '\n').encode('utf-8')
+                    fifo.write(byte_str)
+
+
+class RedrawThrottler(Throttler):
     """
     readline.redisplay() doesn't force a redraw, but SIGWINCH does.
 
@@ -95,27 +156,11 @@ def _redraw_debouncer():
     a new line for a few ms (to prevent a flood of kill calls on
     startup).
     """
-
-    while True:
-        _redraw_event.wait()
-        _redraw_event.clear()
-
-        time.sleep(max(_next_redraw_at - time.time(), 0))
-
-        if _redraw_event.is_set():
-            continue
-
+    def commit(self):
         # Don't want to trip this in the middle of a write
         with synchronized_writes():
             os.kill(os.getpid(), signal.SIGWINCH)
             time.sleep(0.250)
-
-
-def schedule_redraw(delay_ms=200):
-    global _next_redraw_at
-
-    _next_redraw_at = time.time() + (delay_ms / 1000.0)
-    _redraw_event.set()
 
 
 # "22:14:03 \x1b[23mNICK\x1b[0m message"
@@ -135,7 +180,7 @@ def _extract_nick(line):
     return match.group(1)
 
 
-def _print_lines(out, completer):
+def _print_lines(out, redrawer, completer):
     with synchronized_writes():
         Term.write(Term.RESET)
 
@@ -152,13 +197,13 @@ def _print_lines(out, completer):
                 Term.START_OF_NEXT
             )
 
-            schedule_redraw()
+            redrawer.schedule(delay_ms=250)
 
 
-def print_lines(proc, completer):
+def print_lines(proc, redrawer, completer):
     return threading.Thread(
         target=_print_lines,
-        args=[proc, completer],
+        args=[proc, redrawer, completer],
         daemon=True
     ).start()
 
@@ -169,14 +214,12 @@ RESET = '\x1B[0m'
 
 
 def input_loop(path, name, last_name):
-    inp = os.path.join(path, 'in')
+    input_path = os.path.join(path, 'in')
+
+    writer = WriteThrottler(input_path)
+    writer.start_thread()
 
     prompt = '%s%s[ %s ]%s ' % (BG_BLACK, FG_WHITE, name, RESET)
-
-    def write_line(line):
-        b = (line + '\n').encode('utf-8')
-        with open(inp, 'wb', buffering=0) as fifo:
-            fifo.write(b)
 
     while True:
         try:
@@ -207,7 +250,8 @@ def input_loop(path, name, last_name):
             elif line == '/refresh':
                 return name
 
-            write_line(line)
+            writer.write(line)
+
 
         # Interrupt triggers rerender
         except KeyboardInterrupt:
@@ -228,8 +272,11 @@ def select_buffer_path(path, name, last_name):
     completer = TabCompleter()
     init_readline(completer)
 
+    redrawer = RedrawThrottler()
+    redrawer.start_thread()
+
     proc = tail_file(os.path.join(path, 'out'))
-    print_lines(proc.stdout, completer)
+    print_lines(proc.stdout, redrawer, completer)
 
     next_buf = input_loop(path, name, last_name)
 
@@ -248,11 +295,6 @@ def main():
 
     name = os.path.basename(full_path)
     path = os.path.dirname(full_path)
-
-    threading.Thread(
-        target=_redraw_debouncer,
-        daemon=True
-    ).start()
 
     last_name = name
     while name is not None:

@@ -467,12 +467,7 @@ func (c *Client) getBuffer(name string) *buffer {
 	}
 
 	path := c.directory
-
-	// We want to write `in`, `out` top level for the server, and
-	// as a child for every other buffer.
-	if name != serverBufferName {
-		path = filepath.Join(path, name)
-	}
+        path = filepath.Join(path, name)
 
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
 		log.Fatal(err)
@@ -661,7 +656,7 @@ func normalizeBufferName(buffer string) string {
 	return strings.Map(func(ch rune) rune {
 		if unicode.IsLetter(ch) || unicode.IsNumber(ch) {
 			return unicode.ToLower(ch)
-		} else if strings.ContainsRune(".#&+!-", ch) {
+		} else if strings.ContainsRune("$*.#&+!-", ch) {
 			return ch
 		}
 
